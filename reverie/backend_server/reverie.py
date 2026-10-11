@@ -186,6 +186,7 @@ if __name__ == '__main__':
   import threading
   import json
   import os
+  import traceback
   from http.server import HTTPServer, BaseHTTPRequestHandler
 
   class VisualDashboardHandler(BaseHTTPRequestHandler):
@@ -195,7 +196,7 @@ if __name__ == '__main__':
           self.end_headers()
           
           sim_code = "render_simulation_run_1"
-          sim_folder = f"environment/frontend_server/storage/{sim_code}"
+          sim_folder = f"{fs_storage}/{sim_code}"
           
           curr_time_str = "جاري التحميل..."
           step_val = 0
@@ -273,7 +274,7 @@ if __name__ == '__main__':
                   short_name = p_name.split()[0]
                   html_content += f'<div class="agent-marker" style="top: {y_pct}%; left: {x_pct}%; background: {color};">📍 {short_name} ({pos[0]},{pos[1]})</div>'
           else:
-              html_content += '<div style="color: #94a3b8; font-size: 13px; z-index: 2;">جاري تحميل مواقع الشخصيات...</div>'
+              html_content += '<div style="color: #94a3b8; font-size: 13px; z-index: 2;">جاري بدء المحاكاة...</div>'
 
           html_content += """
               </div>
@@ -295,7 +296,7 @@ if __name__ == '__main__':
                   </div>
                   """
           else:
-              html_content += "<div class='card' style='text-align:center; color:#94a3b8;'>بانتظار اكتمال أول خطوة للمحاكاة...</div>"
+              html_content += "<div class='card' style='text-align:center; color:#94a3b8;'>جاري معالجة أول خطوة للمحاكاة عبر الذكاء الاصطناعي...</div>"
 
           html_content += """
               <div class="footer">
@@ -321,6 +322,10 @@ if __name__ == '__main__':
   origin = "base_the_ville_isabella_maria_klaus"
   target = "render_simulation_run_1"
 
-  rs = ReverieServer(origin, target)
-  print("==> Starting automated Reverie simulation with Visual Dashboard on Render...")
-  rs.start_server(10000)
+  try:
+      rs = ReverieServer(origin, target)
+      print("==> Starting automated Reverie simulation with Visual Dashboard on Render...")
+      rs.start_server(10000)
+  except Exception as e:
+      print("CRITICAL SIMULATION ERROR:")
+      traceback.print_exc()
