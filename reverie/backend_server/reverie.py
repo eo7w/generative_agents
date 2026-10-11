@@ -4,19 +4,7 @@ Author: Joon Sung Park (joonspk@stanford.edu)
 File: reverie.py
 Description: This is the main program for running generative agent simulations
 that defines the ReverieServer class. This class maintains and records all  
-states related to the simulation. The primary mode of interaction for those  
-running the simulation should be through the open_server function, which  
-enables the simulator to input command-line prompts for running and saving  
-the simulation, among other tasks.
-
-Release note (June 14, 2023) -- Reverie implements the core simulation 
-mechanism described in my paper entitled "Generative Agents: Interactive 
-Simulacra of Human Behavior." If you are reading through these lines after 
-having read the paper, you might notice that I use older terms to describe 
-generative agents and their cognitive modules here. Most notably, I use the 
-term "personas" to refer to generative agents, "associative memory" to refer 
-to the memory stream, and "reverie" to refer to the overarching simulation 
-framework.
+states related to the simulation.
 """
 import json
 import numpy
@@ -43,16 +31,9 @@ class ReverieServer:
   def __init__(self, 
                fork_sim_code,
                sim_code):
-    # FORKING FROM A PRIOR SIMULATION:
-    # <fork_sim_code> indicates the simulation we are forking from. 
-    # Interestingly, all simulations must be forked from some initial 
-    # simulation, where the first simulation is "hand-crafted".
     self.fork_sim_code = fork_sim_code
     fork_folder = f"{fs_storage}/{self.fork_sim_code}"
 
-    # <sim_code> indicates our current simulation. The first step here is to 
-    # copy everything that's in <fork_sim_code>, but edit its 
-    # reverie/meta/json's fork variable. 
     self.sim_code = sim_code
     sim_folder = f"{fs_storage}/{self.sim_code}"
     copyanything(fork_folder, sim_folder)
@@ -64,49 +45,18 @@ class ReverieServer:
       reverie_meta["fork_sim_code"] = fork_sim_code
       outfile.write(json.dumps(reverie_meta, indent=2))
 
-    # LOADING REVERIE'S GLOBAL VARIABLES
-    # The start datetime of the Reverie: 
-    # <start_datetime> is the datetime instance for the start datetime of 
-    # the Reverie instance. Once it is set, this is not really meant to 
-    # change. It takes a string date in the following example form: 
-    # "June 25, 2022"
-    # e.g., ...strptime(June 25, 2022, "%B %d, %Y")
     self.start_time = datetime.datetime.strptime(
                         f"{reverie_meta['start_date']}, 00:00:00",  
                         "%B %d, %Y, %H:%M:%S")
-    # <curr_time> is the datetime instance that indicates the game's current
-    # time. This gets incremented by <sec_per_step> amount everytime the world
-    # progresses (that is, everytime curr_env_file is recieved). 
     self.curr_time = datetime.datetime.strptime(reverie_meta['curr_time'], 
                                                 "%B %d, %Y, %H:%M:%S")
-    # <sec_per_step> denotes the number of seconds in game time that each 
-    # step moves foward. 
     self.sec_per_step = reverie_meta['sec_per_step']
-    
-    # <maze> is the main Maze instance. Note that we pass in the maze_name
-    # (e.g., "double_studio") to instantiate Maze. 
-    # e.g., Maze("double_studio")
     self.maze = Maze(reverie_meta['maze_name'])
-    
-    # <step> denotes the number of steps that our game has taken. A step here
-    # literally translates to the number of moves our personas made in terms
-    # of the number of tiles. 
     self.step = reverie_meta['step']
 
-    # SETTING UP PERSONAS IN REVERIE
-    # <personas> is a dictionary that takes the persona's full name as its 
-    # keys, and the actual persona instance as its values.
-    # This dictionary is meant to keep track of all personas who are part of
-    # the Reverie instance. 
-    # e.g., ["Isabella Rodriguez"] = Persona("Isabella Rodriguezs")
     self.personas = dict()
-    # <personas_tile> is a dictionary that contains the tile location of
-    # the personas (!-> NOT px tile, but the actual tile coordinate).
-    # The tile take the form of a set, (row, col). 
-    # e.g., ["Isabella Rodriguez"] = (58, 39)
     self.personas_tile = dict()
     
-    # Loading in all personas. 
     init_env_file = f"{sim_folder}/environment/{str(self.step)}.json"
     init_env = json.load(open(init_env_file))
     for persona_name in reverie_meta['persona_names']: 
@@ -120,12 +70,8 @@ class ReverieServer:
       self.maze.tiles[p_y][p_x]["events"].add(curr_persona.scratch
                                               .get_curr_event_and_desc())
 
-    # REVERIE SETTINGS PARAMETERS:  
-    # <server_sleep> denotes the amount of time that our while loop rests each
-    # cycle; this is to not kill our machine. 
     self.server_sleep = 0.1
 
-    # SIGNALING THE FRONTEND SERVER: 
     os.makedirs(fs_temp_storage, exist_ok=True)
     
     curr_sim_code = dict()
@@ -140,13 +86,7 @@ class ReverieServer:
 
 
   def save(self): 
-    """
-    Save all Reverie progress -- this includes Reverie's global state as well
-    as all the personas.  
-    """
     sim_folder = f"{fs_storage}/{self.sim_code}"
-
-    # Save Reverie meta information.
     reverie_meta = dict() 
     reverie_meta["fork_sim_code"] = self.fork_sim_code
     reverie_meta["start_date"] = self.start_time.strftime("%B %d, %Y")
@@ -159,83 +99,16 @@ class ReverieServer:
     with open(reverie_meta_f, "w") as outfile: 
       outfile.write(json.dumps(reverie_meta, indent=2))
 
-    # Save the personas.
     for persona_name, persona in self.personas.items(): 
       save_folder = f"{sim_folder}/personas/{persona_name}/bootstrap_memory"
       persona.save(save_folder)
 
 
   def start_path_tester_server(self): 
-    """
-    Starts the path tester server.
-    """
-    def print_tree(tree): 
-      def _print_tree(tree, depth):
-        dash = " >" * depth
-        if type(tree) == type(list()): 
-          if tree:
-            print (dash, tree)
-          return 
-        for key, val in tree.items(): 
-          if key: 
-            print (dash, key)
-          _print_tree(val, depth+1)
-      _print_tree(tree, 0)
-
-    curr_vision = 8
-    s_mem = dict()
-
-    while (True): 
-      try: 
-        curr_dict = {}
-        tester_file = fs_temp_storage + "/path_tester_env.json"
-        if check_if_file_exists(tester_file): 
-          with open(tester_file) as json_file: 
-            curr_dict = json.load(json_file)
-            os.remove(tester_file)
-          
-          curr_sts = self.maze.sq_tile_size
-          curr_camera = (int(math.ceil(curr_dict["x"]/curr_sts)), 
-                         int(math.ceil(curr_dict["y"]/curr_sts))+1)
-          curr_tile_det = self.maze.access_tile(curr_camera)
-
-          world = curr_tile_det["world"]
-          if curr_tile_det["world"] not in s_mem: 
-            s_mem[world] = dict()
-
-          nearby_tiles = self.maze.get_nearby_tiles(curr_camera, curr_vision)
-          for i in nearby_tiles: 
-            i_det = self.maze.access_tile(i)
-            if (curr_tile_det["sector"] == i_det["sector"] 
-                and curr_tile_det["arena"] == i_det["arena"]): 
-              if i_det["sector"] != "": 
-                if i_det["sector"] not in s_mem[world]: 
-                  s_mem[world][i_det["sector"]] = dict()
-              if i_det["arena"] != "": 
-                if i_det["arena"] not in s_mem[world][i_det["sector"]]: 
-                  s_mem[world][i_det["sector"]][i_det["arena"]] = list()
-              if i_det["game_object"] != "": 
-                if (i_det["game_object"] 
-                    not in s_mem[world][i_det["sector"]][i_det["arena"]]):
-                  s_mem[world][i_det["sector"]][i_det["arena"]] += [
-                                                         i_det["game_object"]]
-
-        print ("= " * 15)
-        out_file = fs_temp_storage + "/path_tester_out.json"
-        with open(out_file, "w") as outfile: 
-          outfile.write(json.dumps(s_mem, indent=2))
-        print_tree(s_mem)
-
-      except:
-        pass
-
-      time.sleep(self.server_sleep * 10)
+    pass
 
 
   def start_server(self, int_counter): 
-    """
-    The main backend server of Reverie. 
-    """
     sim_folder = f"{fs_storage}/{self.sim_code}"
     game_obj_cleanup = dict()
 
@@ -306,38 +179,148 @@ class ReverieServer:
 
 
   def open_server(self): 
-    """
-    Open up an interactive terminal prompt.
-    """
     pass
 
 
 if __name__ == '__main__':
   import threading
-  import sys
-  import subprocess
-  import time
+  import json
+  import os
+  from http.server import HTTPServer, BaseHTTPRequestHandler
 
-  # 1. تشغيل محاكاة الذكاء الاصطناعي في الخلفية
-  def run_simulation_background():
-      time.sleep(4)
-      origin = "base_the_ville_isabella_maria_klaus"
-      target = "render_simulation_run_1"
-      try:
-          print("==> Starting automated Reverie simulation in background...")
-          rs = ReverieServer(origin, target)
-          rs.start_server(10000)
-      except Exception as e:
-          print(f"Simulation background error: {e}")
+  class VisualDashboardHandler(BaseHTTPRequestHandler):
+      def do_GET(self):
+          self.send_response(200)
+          self.send_header("Content-type", "text/html; charset=utf-8")
+          self.end_headers()
+          
+          sim_code = "render_simulation_run_1"
+          sim_folder = f"environment/frontend_server/storage/{sim_code}"
+          
+          curr_time_str = "جاري التحميل..."
+          step_val = 0
+          movements_data = {}
+          
+          try:
+              meta_file = f"{sim_folder}/reverie/meta.json"
+              if os.path.exists(meta_file):
+                  with open(meta_file, "r") as f:
+                      meta_info = json.load(f)
+                      curr_time_str = meta_info.get("curr_time", "غير معروف")
+                      step_val = meta_info.get("step", 0)
+                      
+              prev_step = max(0, step_val - 1)
+              move_file = f"{sim_folder}/movement/{prev_step}.json"
+              if os.path.exists(move_file):
+                  with open(move_file, "r") as f:
+                      movements_data = json.load(f)
+          except:
+              pass
 
-  sim_thread = threading.Thread(target=run_simulation_background, daemon=True)
-  sim_thread.start()
+          persona_dict = movements_data.get("persona", {})
+          
+          html_content = f"""
+          <!DOCTYPE html>
+          <html lang="ar" dir="rtl">
+          <head>
+              <meta charset="UTF-8">
+              <meta http-equiv="refresh" content="3">
+              <meta name="viewport" content="width=device-width, initial-scale=1.0">
+              <title>خريطة وحركة الشخصيات الحية</title>
+              <style>
+                  body {{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Tahoma, sans-serif; background: #090d16; color: #f8fafc; margin: 0; padding: 12px; direction: rtl; }}
+                  .header {{ background: linear-gradient(135deg, #1e40af, #3b82f6); padding: 15px; border-radius: 14px; text-align: center; margin-bottom: 12px; box-shadow: 0 4px 12px rgba(30,64,175,0.4); }}
+                  .header h1 {{ margin: 0; font-size: 18px; color: #fff; }}
+                  .badge {{ background: #10b981; color: white; padding: 3px 10px; border-radius: 20px; font-size: 11px; display: inline-block; margin-top: 5px; }}
+                  .stats {{ display: flex; justify-content: space-between; background: #1e293b; padding: 10px 14px; border-radius: 10px; margin-bottom: 12px; font-size: 13px; border: 1px solid #334155; }}
+                  .map-container {{ background: #0f172a; border: 2px solid #3b82f6; border-radius: 12px; height: 190px; position: relative; margin-bottom: 12px; overflow: hidden; display: flex; align-items: center; justify-content: center; }}
+                  .map-bg {{ position: absolute; width: 100%; height: 100%; opacity: 0.15; background-image: radial-gradient(#3b82f6 1px, transparent 1px); background-size: 20px 20px; }}
+                  .agent-marker {{ position: absolute; color: white; padding: 4px 10px; border-radius: 8px; font-size: 11px; font-weight: bold; transform: translate(-50%, -50%); box-shadow: 0 2px 8px rgba(0,0,0,0.5); transition: all 0.5s ease; white-space: nowrap; border: 1px solid #fff; }}
+                  .card {{ background: #1e293b; border-radius: 12px; padding: 12px; margin-bottom: 10px; border: 1px solid #334155; }}
+                  .p-name {{ color: #38bdf8; font-weight: bold; font-size: 15px; margin-bottom: 5px; border-bottom: 1px solid #334155; padding-bottom: 4px; }}
+                  .p-info {{ font-size: 13px; margin: 4px 0; color: #cbd5e1; }}
+                  .highlight {{ color: #fbbf24; }}
+                  .chat-box {{ background: #0f172a; border-right: 3px solid #10b981; padding: 6px 10px; border-radius: 6px; margin-top: 6px; font-size: 12px; color: #34d399; font-style: italic; }}
+                  .footer {{ text-align: center; font-size: 11px; color: #64748b; margin-top: 15px; }}
+              </style>
+          </head>
+          <body>
+              <div class="header">
+                  <h1>🗺️ خريطة وعالم العملاء الافتراضيين</h1>
+                  <div class="badge">🟢 البث الحي مفعل</div>
+              </div>
 
-  # 2. تشغيل واجهة وخريطة اللعبة الحقيقية (Django Frontend) على البورت المخصص من Render
-  port = os.environ.get("PORT", "10000")
-  print(f"==> Starting Django Frontend Server on port {port}...")
-  
-  current_dir = os.path.dirname(os.path.abspath(__file__))
-  django_dir = os.path.normpath(os.path.join(current_dir, "../../environment/frontend_server"))
-  
-  subprocess.run([sys.executable, "manage.py", "runserver", f"0.0.0.0:{port}"], cwd=django_dir)
+              <div class="stats">
+                  <div>⏱️ الوقت: <b style="color:#38bdf8">{curr_time_str}</b></div>
+                  <div>🔄 الخطوة: <b style="color:#fbbf24">{step_val}</b></div>
+              </div>
+
+              <div class="map-container">
+                  <div class="map-bg"></div>
+                  <div style="position: absolute; top: 8px; right: 10px; font-size: 10px; color: #64748b;">خريطة إحداثيات الشخصيات</div>
+          """
+          
+          colors = ["#ef4444", "#3b82f6", "#10b981", "#f59e0b"]
+          idx = 0
+          if persona_dict:
+              for p_name, p_info in persona_dict.items():
+                  pos = p_info.get("movement", [50, 50])
+                  x_pct = min(max(int((pos[0] / 120) * 100), 10), 90)
+                  y_pct = min(max(int((pos[1] / 120) * 100), 10), 90)
+                  color = colors[idx % len(colors)]
+                  idx += 1
+                  
+                  short_name = p_name.split()[0]
+                  html_content += f'<div class="agent-marker" style="top: {y_pct}%; left: {x_pct}%; background: {color};">📍 {short_name} ({pos[0]},{pos[1]})</div>'
+          else:
+              html_content += '<div style="color: #94a3b8; font-size: 13px; z-index: 2;">جاري تحميل مواقع الشخصيات...</div>'
+
+          html_content += """
+              </div>
+
+              <h3 style="font-size: 14px; color: #94a3b8; margin: 10px 5px;">تفاصيل حركة وأنشطة الشخصيات:</h3>
+          """
+
+          if persona_dict:
+              for p_name, p_info in persona_dict.items():
+                  desc = p_info.get("description", "لا توجد تفاصيل")
+                  pos = p_info.get("movement", [0, 0])
+                  chat = p_info.get("chat", "")
+                  html_content += f"""
+                  <div class="card">
+                      <div class="p-name">👤 {p_name}</div>
+                      <div class="p-info">📍 الموقع (الإحداثيات): <b>{pos}</b></div>
+                      <div class="p-info">🎯 النشاط الحالي: <span class="highlight">{desc}</span></div>
+                      {f'<div class="chat-box">💬 "{chat}"</div>' if chat else ''}
+                  </div>
+                  """
+          else:
+              html_content += "<div class='card' style='text-align:center; color:#94a3b8;'>بانتظار اكتمال أول خطوة للمحاكاة...</div>"
+
+          html_content += """
+              <div class="footer">
+                  تحدث الصفحة تلقائياً كل 3 ثوانٍ لعرض مواقع وأنشطة الشخصيات لحظة بلحظة.
+              </div>
+          </body>
+          </html>
+          """
+          self.wfile.write(html_content.encode('utf-8'))
+
+      def log_message(self, format, *args):
+          return
+
+  def run_visual_dashboard():
+      port = int(os.environ.get("PORT", 10000))
+      server = HTTPServer(("0.0.0.0", port), VisualDashboardHandler)
+      print(f"==> Visual Dashboard server started on port {port}")
+      server.serve_forever()
+
+  dashboard_thread = threading.Thread(target=run_visual_dashboard, daemon=True)
+  dashboard_thread.start()
+
+  origin = "base_the_ville_isabella_maria_klaus"
+  target = "render_simulation_run_1"
+
+  rs = ReverieServer(origin, target)
+  print("==> Starting automated Reverie simulation with Visual Dashboard on Render...")
+  rs.start_server(10000)
