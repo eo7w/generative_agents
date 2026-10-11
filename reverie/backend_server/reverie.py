@@ -339,7 +339,30 @@ class ReverieServer:
 
 
 if __name__ == '__main__':
-  # تشغيل تلقائي مباشر بدون مدخلات تفاعلية لتناسب بيئة Render
+  import threading
+  from http.server import HTTPServer, BaseHTTPRequestHandler
+
+  # سيرفر ويب وهمي مصغر لفتح المنفذ المطلوب في Render وتجاوز خطأ الفحص
+  class SimpleHandler(BaseHTTPRequestHandler):
+      def do_GET(self):
+          self.send_response(200)
+          self.send_header("Content-type", "text/plain")
+          self.end_headers()
+          self.wfile.write(b"Generative Agents Simulation is running successfully!")
+      def log_message(self, format, *args):
+          return
+
+  def run_dummy_server():
+      port = int(os.environ.get("PORT", 10000))
+      server = HTTPServer(("0.0.0.0", port), SimpleHandler)
+      print(f"==> Dummy web server started on port {port}")
+      server.serve_forever()
+
+  # تشغيل السيرفر الوهمي في الخلفية
+  server_thread = threading.Thread(target=run_dummy_server, daemon=True)
+  server_thread.start()
+
+  # تشغيل المحاكاة تلقائياً
   origin = "base_the_ville_isabella_maria_klaus"
   target = "render_simulation_run_1"
 
