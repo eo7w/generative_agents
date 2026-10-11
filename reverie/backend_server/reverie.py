@@ -126,11 +126,9 @@ class ReverieServer:
     self.server_sleep = 0.1
 
     # SIGNALING THE FRONTEND SERVER: 
-    # curr_sim_code.json contains the current simulation code, and
-    # curr_step.json contains the current step of the simulation. These are 
-    # used to communicate the code and step information to the frontend. 
-    # Note that step file is removed as soon as the frontend opens up the 
-    # simulation. 
+    # إنشاء مجلد التخزين المؤقت تلقائياً لتجنب خطأ عدم وجود المسار
+    os.makedirs(fs_temp_storage, exist_ok=True)
+    
     curr_sim_code = dict()
     curr_sim_code["sim_code"] = self.sim_code
     with open(f"{fs_temp_storage}/curr_sim_code.json", "w") as outfile: 
