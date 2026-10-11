@@ -126,7 +126,6 @@ class ReverieServer:
     self.server_sleep = 0.1
 
     # SIGNALING THE FRONTEND SERVER: 
-    # إنشاء مجلد التخزين المؤقت تلقائياً لتجنب خطأ عدم وجود المسار
     os.makedirs(fs_temp_storage, exist_ok=True)
     
     curr_sim_code = dict()
@@ -245,6 +244,7 @@ class ReverieServer:
         break
 
       curr_env_file = f"{sim_folder}/environment/{self.step}.json"
+      env_retrieved = False
       if check_if_file_exists(curr_env_file):
         try: 
           with open(curr_env_file) as json_file:
@@ -309,63 +309,35 @@ class ReverieServer:
     """
     Open up an interactive terminal prompt.
     """
-    print ("Note: The agents in this simulation package are computational")
-    print ("constructs powered by generative agents architecture and LLM.\n---")
-
-    sim_folder = f"{fs_storage}/{self.sim_code}"
-
-    while True: 
-      sim_command = input("Enter option: ")
-      sim_command = sim_command.strip()
-      ret_str = ""
-
-      try: 
-        if sim_command.lower() in ["f", "fin", "finish", "save and finish"]: 
-          self.save()
-          break
-        elif sim_command.lower() == "exit": 
-          shutil.rmtree(sim_folder) 
-          break 
-        elif sim_command.lower() == "save": 
-          self.save()
-        elif sim_command[:3].lower() == "run": 
-          int_count = int(sim_command.split()[-1])
-          self.start_server(int_count)
-        print (ret_str)
-      except:
-        traceback.print_exc()
-        print ("Error.")
-        pass
+    pass
 
 
 if __name__ == '__main__':
   import threading
-  from http.server import HTTPServer, BaseHTTPRequestHandler
+  import sys
+  import subprocess
+  import time
 
-  # سيرفر ويب وهمي مصغر لفتح المنفذ المطلوب في Render وتجاوز خطأ الفحص
-  class SimpleHandler(BaseHTTPRequestHandler):
-      def do_GET(self):
-          self.send_response(200)
-          self.send_header("Content-type", "text/plain")
-          self.end_headers()
-          self.wfile.write(b"Generative Agents Simulation is running successfully!")
-      def log_message(self, format, *args):
-          return
+  # 1. تشغيل محاكاة الذكاء الاصطناعي في الخلفية
+  def run_simulation_background():
+      time.sleep(4)
+      origin = "base_the_ville_isabella_maria_klaus"
+      target = "render_simulation_run_1"
+      try:
+          print("==> Starting automated Reverie simulation in background...")
+          rs = ReverieServer(origin, target)
+          rs.start_server(10000)
+      except Exception as e:
+          print(f"Simulation background error: {e}")
 
-  def run_dummy_server():
-      port = int(os.environ.get("PORT", 10000))
-      server = HTTPServer(("0.0.0.0", port), SimpleHandler)
-      print(f"==> Dummy web server started on port {port}")
-      server.serve_forever()
+  sim_thread = threading.Thread(target=run_simulation_background, daemon=True)
+  sim_thread.start()
 
-  # تشغيل السيرفر الوهمي في الخلفية
-  server_thread = threading.Thread(target=run_dummy_server, daemon=True)
-  server_thread.start()
-
-  # تشغيل المحاكاة تلقائياً
-  origin = "base_the_ville_isabella_maria_klaus"
-  target = "render_simulation_run_1"
-
-  rs = ReverieServer(origin, target)
-  print("==> Starting automated Reverie simulation on Render...")
-  rs.start_server(10000)
+  # 2. تشغيل واجهة وخريطة اللعبة الحقيقية (Django Frontend) على البورت المخصص من Render
+  port = os.environ.get("PORT", "10000")
+  print(f"==> Starting Django Frontend Server on port {port}...")
+  
+  current_dir = os.path.dirname(os.path.abspath(__file__))
+  django_dir = os.path.normpath(os.path.join(current_dir, "../../environment/frontend_server"))
+  
+  subprocess.run([sys.executable, "manage.py", "runserver", f"0.0.0.0:{port}"], cwd=django_dir)
