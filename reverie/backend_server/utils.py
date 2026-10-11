@@ -20,13 +20,7 @@ clients = [
 
 client_index = 0
 lock = threading.Lock()
-
-def get_next_client():
-    global client_index
-    with lock:
-        curr_idx = client_index
-        client_index = (client_index + 1) % len(clients)
-    return clients[curr_idx]
+last_request_time = 0
 
 key_owner = "User"
 debug = False
@@ -37,12 +31,24 @@ env_visuals = f"{maze_assets_loc}/the_ville/visuals"
 fs_storage = "../../environment/frontend_server/storage"
 fs_temp_storage = "../../environment/frontend_server/storage/temp"
 
-def ChatGPT_request(prompt, model="meta/llama-3.3-70b-instruct", temperature=0.7, max_tokens=250):
+def ChatGPT_request(prompt, model="meta/llama-3.3-70b-instruct", temperature=0.7, max_tokens=200):
     """
-    إرسال الطلبات مع نظام حماية صارم جداً ضد خطأ 429 وتأخير آمن بين الطلبات
+    إرسال الطلبات بفاصل زمني 12 ثانية لكل طلب لتفادي تجاوز الحد المسموح نهائياً
     """
-    for i in range(10):
-        client = get_next_client()
+    global client_index, last_request_time
+    
+    for i in range(15):
+        with lock:
+            # فرض فاصل زمني 12 ثانية كحد أدنى بين كل طلب وآخر
+            elapsed = time.time() - last_request_time
+            if elapsed < 12.0:
+                time.sleep(12.0 - elapsed)
+            
+            curr_idx = client_index
+            client_index = (client_index + 1) % len(clients)
+            client = clients[curr_idx]
+            last_request_time = time.time()
+
         try:
             completion = client.chat.completions.create(
               model=model,
@@ -52,18 +58,15 @@ def ChatGPT_request(prompt, model="meta/llama-3.3-70b-instruct", temperature=0.7
               top_p=1,
               stream=False
             )
-            # انتظار 3 ثوانٍ كاملة بعد كل طلب لتفادي استهلاك الحد المسموح
-            time.sleep(3.0)
             return completion.choices[0].message.content
         except Exception as e:
-            print(f"Rate limit / 429 hit (Attempt {i+1}/10). Cooling down... Error: {e}")
-            # إذا ظهر خطأ 429، انتظر وقتاً طويلاً تصاعدياً (يبدأ من 10 ثوانٍ ويصعد)
-            sleep_time = (i + 1) * 10
-            time.sleep(sleep_time)
+            print(f"Rate limit / 429 hit (Attempt {i+1}/15). Cooling down for 60 seconds... Error: {e}")
+            # في حال ظهر خطأ، ننتظر دقيقة كاملة لضمان تصفير العداد لدى المزود
+            time.sleep(60)
             
     return ""
 
-def GPT4_request(prompt, model="meta/llama-3.3-70b-instruct", temperature=0.7, max_tokens=400):
+def GPT4_request(prompt, model="meta/llama-3.3-70b-instruct", temperature=0.7, max_tokens=300):
     """
     الدالة البديلة لطلبات GPT
     """
